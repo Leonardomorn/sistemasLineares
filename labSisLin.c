@@ -1,3 +1,5 @@
+//Código criado por Leonardo da Silva Camargo
+//GRR 20203903
 #include <stdio.h>
 #include <math.h>
 
@@ -83,12 +85,6 @@ int main ()
     }
   }
   
-
-
-  tamanhoDasMatrizes(Resultados, QTDE_MATRIZES, tamanhoMatrizes);
-  imprimeCabecario();
-  imprimeResultado(Resultados, QTDE_MATRIZES);
-
 
   
 
