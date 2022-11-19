@@ -161,11 +161,11 @@ void liberaVetSisLin(SistLinear_t **vetSL, int tam)
   free(vetSL);
 }
 
-void iniVetSisLin(SistLinear_t **vetSL, int tam) 
+void iniVetSisLin(SistLinear_t **vetSL, int tam, int tipo) 
 {
   for(int i =0; i< tam; i++)
   {
-  iniSisLin(vetSL[i], diagDominante, COEF_MAX);
+  iniSisLin(vetSL[i], tipo, COEF_MAX);
   }
 }
 
@@ -196,4 +196,60 @@ void liberaVetoresSolucao(real_t **vetorDeVetorSolucao, int numeroMatrizes, int 
     free(vetorDeVetorSolucao[i]); 
   }
   free(vetorDeVetorSolucao);
+}
+
+
+
+void copiaSisLin (SistLinear_t* SL, SistLinear_t* SLcopia)
+{
+  int tam = SL->n;
+  for (int i = 0; i < tam ; i++)
+  {
+    for (int j = 0; j < tam; j++)
+    {
+      SLcopia->A[i][j] = SL->A[i][j];
+
+    }
+    SLcopia->b[i] =SL->b[i];
+  }
+  SLcopia->n = SL->n;
+  
+}
+
+void copiaVetSisLin(SistLinear_t** vetSL, SistLinear_t** vetSLcopia, int quantidadeMatrizes)
+{
+  for (int i = 0; i < quantidadeMatrizes ; i++)
+  {
+    copiaSisLin(vetSL[i], vetSLcopia[i]);
+  }
+  
+}
+
+void tamanhoDasMatrizes(real_t R[10][9], int quantidadeLinha, int tamanhoMatrizes[])
+{
+  for (int i = 0; i < quantidadeLinha; i++)
+  {
+    R[i][0] = tamanhoMatrizes[i];
+  }
+  
+
+}
+
+void imprimeCabecario()
+{
+      printf("               n|           t_egp|normaResiduo_egp|            t_gs|           it_gs| normaResiduo_gs|           t_ref|          it_ref|normaResiduo_ref| \n");
+}
+
+void imprimeResultado(real_t R[10][9], int quantidadeLinha)
+{
+  for (int i = 0; i < quantidadeLinha-1; i++)
+  {
+    for (int j = 0; j < 9; j++)
+    {
+        printf("%16g|", R[i][j]);
+    }
+    
+    printf("\n");
+  }
+  
 }

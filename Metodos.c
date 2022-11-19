@@ -6,6 +6,7 @@
 #include "sislin.h"
 #include "Metodos.h"
 
+
 /*!
   \brief Método da Eliminação de Gauss
 
@@ -21,7 +22,6 @@ int eliminacaoGauss (SistLinear_t *SL, real_t *vetorSolucao, double *tTotal)
   triangularizaSistema(SL);
   retrosubs(SL, vetorSolucao);
   *tTotal = timestamp() - *tTotal;
-
 }
 
 void triangularizaSistema(SistLinear_t *SL)
@@ -47,6 +47,7 @@ void pivoteamentoParcial(SistLinear_t *SL, int linhaAtual)
 {
   int tam = SL->n;
   int linhaMax = linhaAtual;
+  int bAux;
   //descobre a linha que possui o maior número na coluna da linha atual
   for (int i = linhaAtual+1; i < tam; i++)
   {
@@ -67,6 +68,10 @@ void pivoteamentoParcial(SistLinear_t *SL, int linhaAtual)
     SL->A[linhaAtual][i] = SL->A[linhaMax][i];
     SL->A[linhaMax][i] = vetAux[i];
   }
+
+  bAux = SL->b[linhaMax];
+  SL->b[linhaMax] = SL->b[linhaAtual];
+  SL->b[linhaAtual] = bAux;
   
   free(vetAux);
 }
@@ -90,6 +95,24 @@ void retrosubs(SistLinear_t *SL, real_t *vetorSolucao)
   
 }
 
+void retrosubsWEmResiduo(SistLinear_t *SL,real_t *vetorW,real_t *residuo)
+{
+  int tam = SL->n;
+
+  for (int i = tam-1; i >= 0; i--)
+  {
+    vetorW[i] = residuo[i];
+    for (int j = tam - 1 ; j > i; j--)
+    {
+      vetorW[i] = vetorW[i] - SL->A[i][j] * vetorW[j];
+  
+    }
+    vetorW[i] = vetorW[i] / SL->A[i][i];
+    
+  }
+}
+
+
 /*!
   \brief Essa função calcula a norma L2 do resíduo de um sistema linear 
 
@@ -100,15 +123,15 @@ real_t normaL2Residuo(SistLinear_t *SL, real_t *residuo)
 {
  int tam = SL->n;
  real_t *auxResiduo = malloc (SL->n * sizeof(real_t));
-
  real_t normaL2 = 0.0;
+
  for (int i = 0; i < tam; i++)
  {
   auxResiduo[i] = residuo[i] * residuo[i];
  }
  
  normaL2 = ABS(somaKahan(auxResiduo, tam));
-
+ normaL2 = sqrt(normaL2);
  free(auxResiduo);
  return normaL2; 
 }
@@ -125,8 +148,9 @@ real_t normaL2Residuo(SistLinear_t *SL, real_t *residuo)
   \return código de erro. Um nr positivo indica sucesso e o nr
           de iterações realizadas. Um nr. negativo indica um erro.
   */
-int gaussSeidel (SistLinear_t *SL, real_t *x, real_t erro, double *tTotal)
+int gaussSeidel (SistLinear_t *SL, real_t *x, real_t erro, double *tTotal, real_t *norma_gs)
 {
+  *tTotal = timestamp();
   int tam = SL->n;
   int iteracoes = 0;
   real_t *xAux;
@@ -155,11 +179,20 @@ int gaussSeidel (SistLinear_t *SL, real_t *x, real_t erro, double *tTotal)
 
     if (erroMaximo(SL, xAux, x) <= erro)
     {
-      return iteracoes;
+      zeraVetorSolucao(SL, xAux);
+      calculaEAtribuiResiduo(SL, x, xAux);
+      *norma_gs = normaL2Residuo(SL, xAux);
       free(xAux);
+      iteracoes++;
+      *tTotal = timestamp() - *tTotal;
+      return iteracoes;
+
     }
   }
+
+  *norma_gs = normaL2Residuo(SL, xAux);
   free(xAux);
+  *tTotal = timestamp() - *tTotal;
   return iteracoes;
 }
 
@@ -168,8 +201,8 @@ real_t erroMaximo(SistLinear_t* SL,real_t *xAux, real_t *x)
   real_t maxErro = 0;
   for (int i = 0; i < SL->n; i++)
   {
-    if (maxErro < (abs(xAux[i] - x[i])))
-      maxErro = abs(xAux[i] - x[i]);
+    if (maxErro < (ABS(xAux[i] - x[i])))
+      maxErro = ABS(xAux[i] - x[i]);
   }
   return maxErro;
 }
@@ -205,44 +238,84 @@ int zeraVetorSolucao(SistLinear_t *SL, real_t *x)
   \return código de erro. Um nr positivo indica sucesso e o nr
           de iterações realizadas. Um nr. negativo indica um erro.
   */
-int refinamento (SistLinear_t *SL, real_t *vetorSolucao, real_t erro, double *tTotal)
+int refinamento (SistLinear_t *SL, real_t *vetorSolucao, real_t erro, double *tTotal,
+                    real_t *norma_egp, real_t *norma_ref)
 {
-*tTotal = timestamp();
-real_t *residuo = malloc (SL->n * sizeof (real_t));
-real_t variavelDescartavel; // apenas para poder chamar a eliminacao de gauss
-real_t normaL2;
-int tam = SL->n;
-int iteracoes = 0;
-//passo 1 
-//obter solucao inicial
-eliminacaoGauss(SL, vetorSolucao, &variavelDescartavel);
+  *tTotal = timestamp();   
+  real_t variavelDescartavel; // apenas para poder chamar a eliminacao de gauss
+  real_t *residuo = malloc (SL->n * sizeof (real_t));
+  real_t *vetorW = malloc (SL->n * sizeof (real_t));
+  real_t *vetorSolucaoAnterior = malloc (SL->n * sizeof (real_t));
+  real_t normaL2;
+  int tam = SL->n;
+  int iteracoes = 0;
 
-for (int iteracoes = 0; iteracoes < tam; iteracoes++)
-{
-  //passo 2
-  // Calcular o resíduo r = b - Ax(i) e testar critério de parada (a)
+  zeraVetorSolucao(SL, vetorSolucao);
+
+  //passo 1 
+  //obter solucao inicial
+  eliminacaoGauss(SL, vetorSolucao, &variavelDescartavel);
   calculaEAtribuiResiduo(SL, vetorSolucao, residuo);
+
   normaL2 = normaL2Residuo(SL, residuo); 
-  if (normaL2 < ERRO)
+  *norma_egp = normaL2;
+
+  for (int iteracoes = 0; iteracoes < tam; iteracoes++)
   {
-    free(residuo);
-    return iteracoes;
+    //passo 2
+    // Calcular o resíduo r = b - Ax(i) e testar critério de parada (a)
+    calculaEAtribuiResiduo(SL, vetorSolucao, residuo);
+
+
+    if (normaL2 < ERRO)
+    {
+      *norma_ref = normaL2;
+      free(residuo);
+      free(vetorW);
+      free(vetorSolucaoAnterior);
+      *tTotal = timestamp() - *tTotal;
+      iteracoes++;
+      return iteracoes;
+    }
+  
+
+    //passo 3
+    //  Obter w resolvendo Aw = r;
+    retrosubsWEmResiduo(SL, vetorW, residuo);
+
+    //passo 4
+    //Obter nova solução x(i+1) = x(i)+w e testar critério de parada (b);
+    atribuiAuxSolucao(SL, vetorSolucaoAnterior, vetorSolucao);
+    for (int i = 0; i < tam; i++)
+    {
+      vetorSolucao[i] = vetorW[i] + vetorSolucao[i];
+    }
+    //critério de parada
+    if(erroMaximo(SL, vetorSolucaoAnterior, vetorSolucao) < ERRO)
+    {
+
+      *norma_ref = normaL2;
+      free(residuo);
+      free(vetorW);
+      free(vetorSolucaoAnterior);
+      *tTotal = timestamp() - *tTotal;
+      iteracoes++;
+      return iteracoes;     
+    }
+    
+
+    //passo 5
+    //Incrementar iteração e voltar ao passo 2;
+
+  
   }
   
-  
-}
-
-//passo 3
-//
-
-
-//passo 4
-//
-
-//passo 5
-//
-
-free(residuo);
+  *norma_ref = normaL2;
+  free(residuo);
+  free(vetorW);
+  free(vetorSolucaoAnterior);
+  *tTotal = timestamp() - *tTotal;
+  return iteracoes;
 }
 
 //funcao que calcula o residuo e atribui na variável residuo
@@ -253,16 +326,19 @@ void calculaEAtribuiResiduo(SistLinear_t* SL, real_t *vetorSolucao, real_t *resi
 
   for (int i = 0; i < tam; i++)
   {
-    residuo[i] = 0.0;
-    for (int j = i; j < tam; j++)
+
+    for (int j = 0; j < tam; j++)
     {
       resAux[j] = SL->A[i][j] * vetorSolucao[j];
     }
+
+
     residuo[i] = somaKahan(resAux, tam); //soma do lado esquerdo do Sislin (Ax)
+
     residuo[i] = SL->b[i] - residuo[i]; // r = b - Ax
 
   }
-  
+
   free (resAux);
 
 }
